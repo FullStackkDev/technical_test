@@ -8,8 +8,20 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Application } from 'src/models/applications/application.entity';
+import { ApplicationStatus } from 'src/enums/application-status.enum';
 import {
-  ApplicationDto,
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
   BrokerApplicationPostResponseDto,
   BrokerApplicationsListBadRequestResponseDto,
   BrokerApplicationsListRequestDto,
@@ -17,16 +29,14 @@ import {
 } from './list-applications.dto';
 import { BrokerDto } from 'src/models/brokers/broker.dto';
 import { BrokerGuard } from '../../broker.guard';
-import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Inject, Post, Query, UseGuards } from '@nestjs/common';
 import { INTERNAL_SERVER_ERROR } from 'src/common/constants/response-messages';
 import { InternalServerErrorResponseDto } from 'src/common/responses';
+import { Op } from 'sequelize';
 import { Task } from 'src/models/tasks/task.entity';
 import { TaskStatus } from 'src/enums/task-status.enum';
 import { createDateFilter } from 'src/common/query-filters';
 import { formatResponseTable } from 'src/common/swagger';
 import User from 'src/common/decorators/user';
-import { Op } from 'sequelize';
-import { ApplicationStatus } from 'src/enums/application-status.enum';
 
 /**
  * Broker API endpoint for listing applications they have submitted with optional result filtering.
@@ -122,8 +132,7 @@ export class BrokerApplicationsListController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Create applications',
-    description:
-      'Create the applications that the broker has submitted.',
+    description: 'Create the applications that the broker has submitted.',
   })
   @ApiOkResponse({
     type: BrokerApplicationPostResponseDto,
@@ -136,16 +145,37 @@ export class BrokerApplicationsListController {
     type: BrokerApplicationsListBadRequestResponseDto,
     description: formatResponseTable({}),
   })
-  async post(
-    @User() user: BrokerDto,
-    @Body() body: ApplicationDto
-  ): Promise<BrokerApplicationPostResponseDto> {
-    const avgLoanAmount = await this.applicationEntity.getAverageLoanAmount()
-    const loanAmount = body.loanAmount !== avgLoanAmount ? body.loanAmount : null;
-    // const application = await this.applicationEntity.create({ ...body, status: ApplicationStatus.Submitted, brokerId: user.id });
-    return {
-      success: true,
-      loanAmount
-    };
+  async post(@User() user: BrokerDto, @Body() body: any) {
+    try {
+      // Get the average loan
+      const avgLoanAmount = await this.applicationEntity.getAverageLoanAmount();
+      
+      // Determine if the loan amount is different from the average
+      const loanAmount = body.loanAmount !== avgLoanAmount ? body.loanAmount : null;
+      await this.applicationEntity.create({
+        ...body,
+        status: ApplicationStatus.Submitted,
+        brokerId: user.id,
+      });
+  
+      // Return a success response with the body data
+      return {
+        success: true,
+        loanAmount,
+        ...body,
+      };
+    } catch (error) {
+      // Handle errors
+      console.error('Error occurred while saving application:', error);
+  
+      // Return an error response
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: 'An error occurred while saving the application'
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
   }
 }

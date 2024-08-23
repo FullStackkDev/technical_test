@@ -5,7 +5,6 @@ import { useToast } from '@/composables/useToast';
 import { ref } from 'vue';
 const modal = useModal<boolean>()
 const toast = useToast()
-
 const formData = ref({
   applicantName: '',
   applicantEmail: '',
@@ -25,32 +24,74 @@ const formData = ref({
   savingsContribution: 0,
 });
 
-const submitApplication = async () => {
-  const response = await api.applications.post(formData.value)
-  if (response.success) toast.success('Application Saved Successfully.')
-  else {
-    toast.error('Error occurred while saving application')
-    formData.value.applicantName = '';
-    formData.value.applicantEmail = '';
-    formData.value.applicantMobilePhoneNumber = '';
-    formData.value.applicantAddress = '';
-    formData.value.annualIncomeBeforeTax = 0;
-    formData.value.incomingAddress = '';
-    formData.value.incomingDeposit = 0;
-    formData.value.incomingPrice = 0;
-    formData.value.incomingStampDuty = 0;
-    formData.value.loanAmount = 0;
-    formData.value.loanDuration = 0;
-    formData.value.monthlyExpenses = 0;
-    formData.value.outgoingAddress = '';
-    formData.value.outgoingMortgage = 0;
-    formData.value.outgoingValuation = 0;
-    formData.value.savingsContribution = 0;
-  }
-  modal.confirm(false)
-}
-</script>
+const validateForm = () => {
+  const errors: string[] = [];
+  if (!formData.value.applicantName) errors.push('Applicant Name is required.');
+  if (!formData.value.applicantEmail) errors.push('Applicant Email is required.');
+  if (!formData.value.applicantMobilePhoneNumber) errors.push('Applicant Mobile Phone Number is required.');
+  if (!formData.value.applicantAddress) errors.push('Applicant Address is required.');
+  if (formData.value.annualIncomeBeforeTax <= 0) errors.push('Annual Income Before Tax must be greater than 0.');
+  if (!formData.value.incomingAddress) errors.push('Incoming Address is required.');
+  if (formData.value.incomingDeposit <= 0) errors.push('Incoming Deposit must be greater than 0.');
+  if (formData.value.incomingPrice <= 0) errors.push('Incoming Price must be greater than 0.');
+  if (formData.value.incomingStampDuty <= 0) errors.push('Incoming Stamp Duty must be greater than 0.');
+  if (formData.value.loanAmount <= 0) errors.push('Loan Amount must be greater than 0.');
+  if (formData.value.loanDuration <= 0) errors.push('Loan Duration must be greater than 0.');
+  if (formData.value.monthlyExpenses <= 0) errors.push('Monthly Expenses must be greater than 0.');
+  if (!formData.value.outgoingAddress) errors.push('Outgoing Address is required.');
+  if (formData.value.outgoingMortgage <= 0) errors.push('Outgoing Mortgage must be greater than 0.');
+  if (formData.value.outgoingValuation <= 0) errors.push('Outgoing Valuation must be greater than 0.');
+  if (formData.value.savingsContribution <= 0) errors.push('Savings Contribution must be greater than 0.');
+  return errors;
+};
 
+const resetForm = () => {
+  Object.keys(formData.value).forEach(key => {
+    if (typeof formData.value[key] === 'number') {
+      formData.value[key] = 0;
+    } else {
+      formData.value[key] = '';
+    }
+  });
+};
+
+const submitApplication = async () => {
+  // Validate the form before submission
+  const errors = validateForm();
+  if (errors.length > 0) {
+    errors.forEach(error => toast.error(error));
+    return;
+  }
+
+  try {
+
+    // Submit the form data
+    const response = await api.applications.post(formData.value);
+
+    if (response.success) {
+      // Display success message
+      toast.success('Application Saved Successfully.');
+
+      // Reset form fields
+      resetForm();
+
+      // Close the modal
+      modal.confirm(false);
+    } else {
+      // Handle application saving failure
+      throw new Error('Application saving failed');
+    }
+  } catch (error: any) {
+    // Handle different types of errors
+    if (error.response && error.response.data) {
+      // Handle backend validation errors or other responses
+      toast.error('Error occurred while saving application: ' + (error.response.data.message || error.message));
+    } else {
+      toast.error('Error occurred while saving application: ' + error.message);
+    }
+  }
+};
+</script>
 <template>
   <div class="action-section">
     <BCard align-title="center" align-footer="center" align-content="center">
@@ -64,9 +105,7 @@ const submitApplication = async () => {
 
     <BModal :visible="modal.isVisible.value" :confirm="modal.confirm">
       <template #header>Submit loan application</template>
-
-      <form @submit.prevent="submitApplication()">
-        <!-- Need to change with v-for after change state with object -->
+      <form>
         <label for="applicant_name">Name</label>
         <BTextInput v-model="formData.applicantName" id="applicant_name" type="text" required />
 
@@ -74,7 +113,10 @@ const submitApplication = async () => {
         <BTextInput v-model="formData.applicantEmail" id="applicant_email" type="email" required />
 
         <label for="applicant_mobile_phone_number">Mobile Phone Number</label>
-        <BTextInput v-model="formData.applicantMobilePhoneNumber" id="applicant_mobile_phone_number" type="tel"
+        <BTextInput
+          v-model="formData.applicantMobilePhoneNumber"
+          id="applicant_mobile_phone_number"
+          type="tel"
           required />
 
         <label for="applicant_address">Applicant Address</label>
@@ -107,7 +149,7 @@ const submitApplication = async () => {
       </form>
 
       <template #footer>
-        <BButton type="submit" variant="primary" label="Submit"></BButton>
+        <BButton type="submit" variant="primary" label="Submit" v-on:click="submitApplication()"></BButton>
         <BButton label="Cancel" @click="modal.confirm(false)"></BButton>
       </template>
     </BModal>
